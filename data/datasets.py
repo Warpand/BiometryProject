@@ -1,27 +1,29 @@
-from functools import cache
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
+import lightning
 import numpy as np
 import pandas as pd
 import torch
+from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 from PIL import Image
 
 _BASE_PATH = Path(__file__).parent.parent / "dataset"
+IMPOSTOR_ID = -1
 
 
 def _get_full_path(path: str) -> Path:
     return _BASE_PATH / path
 
 
-class TrainDataset(torch.utils.data.Dataset):
+class WebFaceDataset(torch.utils.data.Dataset):
     def __init__(
         self, metadata: pd.DataFrame, transform: Callable[[Image], torch.Tensor]
     ) -> None:
         super().__init__()
         self.metadata = metadata
         self.transform = transform
-        self._num_classes = metadata["id"].max()
+        self._num_classes = metadata["id"].unique()
 
     def __len__(self) -> int:
         return len(self.metadata)
@@ -36,64 +38,106 @@ class TrainDataset(torch.utils.data.Dataset):
         return self._num_classes
 
 
-class TestDataset(torch.utils.data.Dataset):
-    def __init__(
-        self, metadata: pd.DataFrame, transform: Callable[[Image], torch.Tensor]
-    ) -> None:
-        super().__init__()
-        self.data = torch.stack(
-            [
-                transform(Image.open(_get_full_path(row[1])))
-                for row in metadata.itertuples()
-            ]
-        )
+class WebFaceDatamodule(lightning.LightningDataModule):
+    TEST_BATCH_SIZE = 1024
 
-    def __len__(self) -> int:
-        return len(self.data)
-
-    def __getitem__(self, index: int) -> torch.Tensor:
-        return self.data[index]
-
-    @property
-    def all(self) -> torch.Tensor:
-        return self.data
-
-
-class DatasetFactory:
     def __init__(
         self,
-        num_members: int,
-        num_impostors: int,
         transform: Callable[[Image], torch.Tensor],
-    ):
-        self.df = pd.read_csv(_get_full_path("metadata.csv"))
-        max_id = self.df["id"].iloc[-1]
-        self.min_impostor_id = max_id - num_impostors
-        self.min_member_id = self.min_impostor_id - num_members
+        batch_size: int,
+        num_workers: int = 8,
+        num_validation_members: int = 50,
+        num_validation_impostors: int = 50,
+        num_members: int = 100,
+        num_impostors: int = 100,
+    ) -> None:
+        super().__init__()
         self.transform = transform
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.num_validation_members = num_validation_members
+        self.num_validation_impostors = num_validation_impostors
+        self.num_members = num_members
+        self.num_impostors = num_impostors
 
-    @cache
-    def _get_member_metadata(self) -> pd.DataFrame:
-        return self.df[
-            (self.df["id"] >= self.min_member_id)
-            & (self.df["id"] < self.min_impostor_id)
-        ]
+        self.train_dataset = None
+        self.validation_dataset = None
+        self.test_dataset = None
+        self.knowledge = {}
 
-    def get_train_dataset(self) -> TrainDataset:
-        train_metadata = self.df[self.df["id"] < self.min_member_id]
-        return TrainDataset(train_metadata, self.transform)
-
-    def get_knowledge_dataset(self) -> TestDataset:
-        member_metadata = self._get_member_metadata()
-        knowledge_metadata = member_metadata.drop_duplicates(subset="id")
-        return TestDataset(knowledge_metadata, self.transform)
-
-    def get_member_dataset(self) -> TestDataset:
-        member_metadata = self._get_member_metadata()
-        member_metadata = member_metadata[member_metadata.duplicated(subset="id")]
-        return TestDataset(member_metadata, self.transform)
-
-    def get_impostor_dataset(self) -> TestDataset:
-        return TestDataset(
-            self.df[self.df["id"] >= self.min_impostor_id], self.transform
+    def _get_evaluation_data(
+        self, df: pd.DataFrame, min_impostor_id
+    ) -> (WebFaceDataset, (torch.Tensor, torch.Tensor)):
+        members_metadata = df[df["id"] < min_impostor_id]
+        members_test_metadata = members_metadata.drop_duplicates(subset="id")
+        impostor_metadata = df[df["id"] >= min_impostor_id]
+        impostor_metadata["id"] = IMPOSTOR_ID
+        metadata = pd.concat((members_test_metadata, impostor_metadata))
+        dataset = WebFaceDataset(metadata, self.transform)
+        knowledge_metadata = members_metadata.duplicated(subset="id")
+        knowledge = (
+            torch.stack(
+                [
+                    self.transform(Image.open(_get_full_path(row[1])))
+                    for row in knowledge_metadata
+                ]
+            ),
+            torch.LongTensor(knowledge_metadata["id"]),
         )
+        return dataset, knowledge
+
+    def setup(self, stage: str) -> None:
+        df = pd.read_csv(_get_full_path("metadata.csv"))
+        max_id = df["id"].iloc[-1]
+        min_impostor_id = max_id - self.num_impostors
+        min_member_id = min_impostor_id - self.num_members
+        min_validation_impostor_id = min_member_id - self.num_validation_impostors
+        min_validation_member_id = min_member_id - self.num_validation_members
+
+        if stage == "fit":
+            train_metadata = df[df["id"] < min_validation_member_id]
+            val_metadata = df[
+                (df["id"] >= min_validation_member_id) & (df["id"] < min_member_id)
+            ]
+            self.train_dataset = WebFaceDataset(train_metadata, self.transform)
+            self.validation_dataset, knowledge = self._get_evaluation_data(
+                val_metadata, min_validation_impostor_id
+            )
+            self.knowledge["validation"] = knowledge
+        else:
+            self.test_dataset, knowledge = self._get_evaluation_data(
+                df[df["id"] >= min_member_id], min_impostor_id
+            )
+            self.knowledge["test"] = knowledge
+
+    def train_dataloader(self) -> TRAIN_DATALOADERS:
+        assert self.train_dataset is not None
+        return torch.utils.data.DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self) -> EVAL_DATALOADERS:
+        assert self.validation_dataset is not None
+        return torch.utils.data.DataLoader(
+            self.validation_dataset, batch_size=self.TEST_BATCH_SIZE, shuffle=True
+        )
+
+    def test_dataloader(self) -> EVAL_DATALOADERS:
+        assert self.test_dataset is not None
+        return torch.utils.data.DataLoader(
+            self.test_dataset, batch_size=self.TEST_BATCH_SIZE
+        )
+
+    def predict_dataloader(self) -> EVAL_DATALOADERS:
+        assert self.test_dataset is not None
+        return torch.utils.data.DataLoader(
+            self.test_dataset, batch_size=self.TEST_BATCH_SIZE
+        )
+
+    def get_knowledge(
+        self, phase: Literal["validation", "test"]
+    ) -> (torch.Tensor, torch.LongTensor):
+        return self.knowledge[phase]
