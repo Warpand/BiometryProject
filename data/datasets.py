@@ -79,7 +79,7 @@ class WebFaceDatamodule(lightning.LightningDataModule):
             torch.stack(
                 [
                     self.transform(Image.open(_get_full_path(row[1])))
-                    for row in knowledge_metadata
+                    for row in knowledge_metadata.iterrows()
                 ]
             ),
             torch.LongTensor(knowledge_metadata["id"]),
@@ -122,7 +122,8 @@ class WebFaceDatamodule(lightning.LightningDataModule):
     def val_dataloader(self) -> EVAL_DATALOADERS:
         assert self.validation_dataset is not None
         return torch.utils.data.DataLoader(
-            self.validation_dataset, batch_size=self.TEST_BATCH_SIZE, shuffle=True
+            self.validation_dataset,
+            batch_size=self.TEST_BATCH_SIZE,
         )
 
     def test_dataloader(self) -> EVAL_DATALOADERS:
