@@ -8,6 +8,8 @@ import torch
 from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 from PIL import Image
 
+from . import pandas_utils
+
 _BASE_PATH = Path(__file__).parent.parent / "dataset"
 IMPOSTOR_ID = -1
 
@@ -68,9 +70,9 @@ class WebFaceDatamodule(lightning.LightningDataModule):
     def _get_evaluation_data(
         self, df: pd.DataFrame, min_impostor_id
     ) -> (WebFaceDataset, (torch.Tensor, torch.Tensor)):
-        members_metadata = df[df["id"] < min_impostor_id]
+        members_metadata = pandas_utils.l_than(df, "id", min_impostor_id)
         members_test_metadata = members_metadata.drop_duplicates(subset="id")
-        impostor_metadata = df[df["id"] >= min_impostor_id]
+        impostor_metadata = pandas_utils.ge_than(df, "id", min_impostor_id)
         impostor_metadata["id"] = IMPOSTOR_ID
         metadata = pd.concat((members_test_metadata, impostor_metadata))
         dataset = WebFaceDataset(metadata, self.transform)
@@ -95,10 +97,10 @@ class WebFaceDatamodule(lightning.LightningDataModule):
         min_validation_member_id = min_member_id - self.num_validation_members
 
         if stage == "fit":
-            train_metadata = df[df["id"] < min_validation_member_id]
-            val_metadata = df[
-                (df["id"] >= min_validation_member_id) & (df["id"] < min_member_id)
-            ]
+            train_metadata = pandas_utils.l_than(df, "id", min_validation_member_id)
+            val_metadata = pandas_utils.between(
+                df, "id", min_validation_member_id, min_member_id
+            )
             self.train_dataset = WebFaceDataset(train_metadata, self.transform)
             self.validation_dataset, knowledge = self._get_evaluation_data(
                 val_metadata, min_validation_impostor_id
@@ -106,7 +108,7 @@ class WebFaceDatamodule(lightning.LightningDataModule):
             self.knowledge["validation"] = knowledge
         else:
             self.test_dataset, knowledge = self._get_evaluation_data(
-                df[df["id"] >= min_member_id], min_impostor_id
+                pandas_utils.ge_than(df, "id", min_member_id), min_impostor_id
             )
             self.knowledge["test"] = knowledge
 
