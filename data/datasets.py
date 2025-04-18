@@ -1,5 +1,6 @@
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
 
 import lightning
 import numpy as np
@@ -41,6 +42,7 @@ class WebFaceDataset(torch.utils.data.Dataset):
 
 
 class WebFaceDatamodule(lightning.LightningDataModule):
+    VALIDATION_BATCH_SIZE = 256
     TEST_BATCH_SIZE = 1024
 
     def __init__(
@@ -119,13 +121,16 @@ class WebFaceDatamodule(lightning.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
+            drop_last=True,
         )
 
     def val_dataloader(self) -> EVAL_DATALOADERS:
         assert self.validation_dataset is not None
         return torch.utils.data.DataLoader(
             self.validation_dataset,
-            batch_size=self.TEST_BATCH_SIZE,
+            batch_size=self.VALIDATION_BATCH_SIZE,
+            shuffle=True,
+            drop_last=True,
         )
 
     def test_dataloader(self) -> EVAL_DATALOADERS:
