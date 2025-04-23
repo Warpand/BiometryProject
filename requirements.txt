@@ -3,3 +3,9 @@ pandas==2.2.3
 pillow==11.1.0
 tqdm==4.67.1
 opencv-python==4.11.0.86
+torch==2.6.0
+torchvision==0.21.0
+torchmetrics==1.7.0
+lightning==2.5.1
+tyro==0.9.19
+coolname==2.2.0
