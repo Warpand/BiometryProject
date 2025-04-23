@@ -26,13 +26,14 @@ def _get_full_path(path: str) -> Path:
 
 
 class WebFaceDataset(torch.utils.data.Dataset):
+    NUM_IDENTITIES = 10571
+
     def __init__(
         self, metadata: pd.DataFrame, transform: Callable[[Image], torch.Tensor]
     ) -> None:
         super().__init__()
         self.metadata = metadata
         self.transform = transform
-        self._num_classes = metadata["id"].unique()
 
     def __len__(self) -> int:
         return len(self.metadata)
@@ -41,10 +42,6 @@ class WebFaceDataset(torch.utils.data.Dataset):
         data = self.metadata.iloc[index]
         image = Image.open(_get_full_path(data["file"]))
         return self.transform(image), data["id"]
-
-    @property
-    def num_classes(self) -> int:
-        return self._num_classes
 
 
 @dataclass
@@ -57,7 +54,6 @@ class Knowledge:
 
 
 class WebFaceDatamodule(lightning.LightningDataModule):
-    VALIDATION_BATCH_SIZE = 256
     TEST_BATCH_SIZE = 1024
 
     def __init__(
@@ -143,7 +139,7 @@ class WebFaceDatamodule(lightning.LightningDataModule):
         assert self.validation_dataset is not None
         return torch.utils.data.DataLoader(
             self.validation_dataset,
-            batch_size=self.VALIDATION_BATCH_SIZE,
+            batch_size=self.batch_size,
             shuffle=True,
             drop_last=True,
         )
@@ -162,3 +158,12 @@ class WebFaceDatamodule(lightning.LightningDataModule):
 
     def get_knowledge(self, phase: Literal["validation", "test"]) -> Knowledge:
         return self.knowledge[phase]
+
+    @property
+    def num_train_classes(self) -> int:
+        return WebFaceDataset.NUM_IDENTITIES - (
+            self.num_validation_members
+            + self.num_validation_impostors
+            + self.num_members
+            + self.num_impostors
+        )

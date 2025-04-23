@@ -1,11 +1,13 @@
-from typing import Any, List, Optional, Tuple, Union
+import itertools
+from typing import List, Optional, Tuple, Union
 
 import lightning
 import torch
 import torch.nn.functional as F
-from lightning.pytorch.utilities.types import STEP_OUTPUT
+from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from torchmetrics import Metric
 
+from cfg import OptimizerConfig
 from data import IMPOSTOR_ID, Knowledge
 
 from .loss import ArcFaceLoss
@@ -18,9 +20,11 @@ class ArcFaceModule(lightning.LightningModule):
         self,
         resnet: ResnetAdapter,
         num_classes: int,
-        arc_face_margin: float = 0.5,
-        arc_face_scale: float = 64.0,
-        threshold: float | List[float] = 0.4,
+        arc_face_margin: float,
+        arc_face_scale: float,
+        threshold: float | List[float],
+        epochs: int,
+        optimizer_config: OptimizerConfig,
     ):
         super().__init__()
         self.resnet = resnet
@@ -34,10 +38,14 @@ class ArcFaceModule(lightning.LightningModule):
             self.thresholds = [threshold]
         else:
             self.thresholds = threshold
+
+        self.epochs = epochs
+        self.optimizer_config = optimizer_config
+
         self.knowledge: Optional[Knowledge] = None
         self.impostor_accuracy: List[Metric] = []
         self.member_accuracy: List[Metric] = []
-        self.save_hyperparameters(ignore=["resnet"])
+        self.save_hyperparameters(ignore=["resnet"], logger=False)
 
     def setup(self, stage: str) -> None:
         self.impostor_accuracy = [
@@ -118,3 +126,31 @@ class ArcFaceModule(lightning.LightningModule):
 
     def on_test_epoch_end(self) -> None:
         self.evaluation_epoch_end("test")
+
+    def configure_optimizers(self) -> OptimizerLRScheduler:
+        cfg = self.optimizer_config
+        optimizer = torch.optim.SGD(
+            [
+                {"params": self.resnet.backbone.parameters(), "lr": cfg.lr_backbone},
+                {
+                    "params": itertools.chain(
+                        self.resnet.head.parameters(), self.arc_face_loss.parameters()
+                    ),
+                    "lr": cfg.lr_head,
+                },
+            ],
+            weight_decay=cfg.weight_decay,
+        )
+
+        warmup_scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, lr_lambda=lambda epoch: (epoch + 1) / 5
+        )
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.epochs - cfg.warmup_epochs
+        )
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[cfg.warmup_epochs],
+        )
+        return [optimizer], [scheduler]

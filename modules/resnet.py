@@ -28,19 +28,15 @@ class ResnetAdapter(torch.nn.Module):
     def __init__(self, resnet: torchvision.models.ResNet, embedding_dim: int) -> None:
         super().__init__()
         feature_dim = resnet.fc.in_features
-        self.net = torch.nn.Sequential(
-            *list(resnet.children())[:-1],
-            torch.nn.Flatten(),
-            torch.nn.Linear(feature_dim, embedding_dim)
-        )
-        self._embedding_dim = embedding_dim
+        self.backbone = torch.nn.Sequential(*list(resnet.children())[:-1])
+        self.head = torch.nn.Linear(feature_dim, embedding_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+        return self.head(torch.flatten(self.backbone(x)))
 
     @property
     def embedding_dim(self) -> int:
-        return self._embedding_dim
+        return len(self.head.weight)
 
 
 class ResNetBuilder:
