@@ -29,7 +29,7 @@ class WebFaceDataset(torch.utils.data.Dataset):
     NUM_IDENTITIES = 10571
 
     def __init__(
-        self, metadata: pd.DataFrame, transform: Callable[[Image], torch.Tensor]
+        self, metadata: pd.DataFrame, transform: Callable[[Image.Image], torch.Tensor]
     ) -> None:
         super().__init__()
         self.metadata = metadata
@@ -58,7 +58,7 @@ class WebFaceDatamodule(lightning.LightningDataModule):
 
     def __init__(
         self,
-        transform: Callable[[Image], torch.Tensor],
+        transform: Callable[[Image.Image], torch.Tensor],
         batch_size: int,
         num_workers: int = 8,
         num_validation_members: int = 50,

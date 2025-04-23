@@ -44,7 +44,6 @@ if __name__ == "__main__":
         entity=cfg.logger.wandb_entity,
         tags=["train", str(cfg.model.resnet_version), "casia-webface"],
     )
-
     logger.experiment.config.update(cfg.serialize())
 
     trainer = pytorch_lightning.Trainer(
