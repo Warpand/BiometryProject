@@ -1,6 +1,7 @@
 import coolname
+import pytorch_lightning
+import torch
 import tyro
-from pytorch_lightning import Trainer
 from pytorch_lightning.loggers.wandb import WandbLogger
 
 from cfg import Config
@@ -9,6 +10,11 @@ from modules import ArcFaceModule, get_resnet_builder
 
 if __name__ == "__main__":
     cfg = tyro.cli(Config)
+
+    torch.set_float32_matmul_precision("high")
+
+    if cfg.experiment.seed is not None:
+        pytorch_lightning.seed_everything(cfg.experiment.seed)
 
     resnet_builder = get_resnet_builder(
         embedding_dim=cfg.model.embedding_dim, version=cfg.model.resnet_version
@@ -27,6 +33,7 @@ if __name__ == "__main__":
         threshold=cfg.experiment.threshold,
         epochs=cfg.experiment.epochs,
         optimizer_config=cfg.optimizer,
+        compile_submodules=cfg.model.compile,
     )
 
     logger = WandbLogger(
@@ -40,7 +47,7 @@ if __name__ == "__main__":
 
     logger.experiment.config.update(cfg.serialize())
 
-    trainer = Trainer(
+    trainer = pytorch_lightning.Trainer(
         default_root_dir=cfg.logger.root_dir,
         logger=logger,
         check_val_every_n_epoch=cfg.logger.validation_every_n_epochs,

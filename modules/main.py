@@ -25,6 +25,7 @@ class ArcFaceModule(lightning.LightningModule):
         threshold: float | List[float],
         epochs: int,
         optimizer_config: OptimizerConfig,
+        compile_submodules: bool,
     ):
         super().__init__()
         self.resnet = resnet
@@ -41,6 +42,7 @@ class ArcFaceModule(lightning.LightningModule):
 
         self.epochs = epochs
         self.optimizer_config = optimizer_config
+        self.compile_submodules = compile_submodules
 
         self.knowledge: Optional[Knowledge] = None
         self.impostor_accuracy: List[Metric] = []
@@ -54,6 +56,9 @@ class ArcFaceModule(lightning.LightningModule):
         self.member_accuracy = [
             MemberAccuracy().to(self.device) for _ in range(len(self.thresholds))
         ]
+        if self.compile_submodules:
+            self.resnet = torch.compile(self.resnet)
+            self.arc_face_loss = torch.compile(self.arc_face_loss)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.resnet(x)

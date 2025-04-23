@@ -27,6 +27,7 @@ class ExperimentConfig(BaseConfig):
     threshold: Union[float, List[float]] = field(
         default_factory=lambda: [0.35, 0.40, 0.45, 0.5, 0.55, 0.6]
     )
+    seed: Optional[int] = 42
 
 
 @dataclass
@@ -36,6 +37,7 @@ class ModelConfig(BaseConfig):
     arc_face_margin: float = 0.5
     arc_face_scale: float = 64.0
     pretrained: bool = True
+    compile: bool = True
 
 
 @dataclass
