@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 from torchmetrics import Metric
 
-from data import IMPOSTOR_ID
+from data import IMPOSTOR_ID, Knowledge
 
 from .loss import ArcFaceLoss
 from .metrics import ImpostorAccuracy, MemberAccuracy
@@ -34,9 +34,9 @@ class ArcFaceModule(lightning.LightningModule):
             self.thresholds = [threshold]
         else:
             self.thresholds = threshold
+        self.knowledge: Optional[Knowledge] = None
         self.impostor_accuracy: List[Metric] = []
         self.member_accuracy: List[Metric] = []
-        self.knowledge: Optional[Tuple[torch.Tensor, torch.LongTensor]] = None
         self.save_hyperparameters(ignore=["resnet"])
 
     def setup(self, stage: str) -> None:
@@ -53,8 +53,9 @@ class ArcFaceModule(lightning.LightningModule):
     def embedd(self, x: torch.Tensor) -> torch.Tensor:
         return F.normalize(self.resnet(x))
 
-    def set_knowledge(self, knowledge: Tuple[torch.Tensor, torch.LongTensor]):
-        self.knowledge = (self.embedd(knowledge[0]), knowledge[1])
+    def set_knowledge(self, knowledge: Knowledge):
+        self.knowledge = knowledge.to(self.device)
+        self.knowledge.data = self.embedd(self.knowledge.data)
 
     def find_identities(
         self, x: torch.Tensor, thresholds: List[float]

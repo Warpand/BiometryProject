@@ -1,6 +1,12 @@
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Dict, Literal
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 import lightning
 import numpy as np
@@ -41,6 +47,15 @@ class WebFaceDataset(torch.utils.data.Dataset):
         return self._num_classes
 
 
+@dataclass
+class Knowledge:
+    data: torch.Tensor
+    ids: torch.Tensor
+
+    def to(self, device: str | torch.device) -> Self:
+        return Knowledge(self.data.to(device), self.ids.to(device))
+
+
 class WebFaceDatamodule(lightning.LightningDataModule):
     VALIDATION_BATCH_SIZE = 256
     TEST_BATCH_SIZE = 1024
@@ -67,11 +82,11 @@ class WebFaceDatamodule(lightning.LightningDataModule):
         self.train_dataset = None
         self.validation_dataset = None
         self.test_dataset = None
-        self.knowledge = {}
+        self.knowledge: Dict[str, Knowledge] = {}
 
     def _get_evaluation_data(
         self, df: pd.DataFrame, min_impostor_id
-    ) -> (WebFaceDataset, (torch.Tensor, torch.Tensor)):
+    ) -> (WebFaceDataset, Knowledge):
         members_metadata = pandas_utils.l_than(df, "id", min_impostor_id)
         members_test_metadata = members_metadata.drop_duplicates(subset="id")
         impostor_metadata = pandas_utils.ge_than(df, "id", min_impostor_id)
@@ -79,7 +94,7 @@ class WebFaceDatamodule(lightning.LightningDataModule):
         metadata = pd.concat((members_test_metadata, impostor_metadata))
         dataset = WebFaceDataset(metadata, self.transform)
         knowledge_metadata = members_metadata.duplicated(subset="id")
-        knowledge = (
+        knowledge = Knowledge(
             torch.stack(
                 [
                     self.transform(Image.open(_get_full_path(row[1])))
@@ -145,7 +160,5 @@ class WebFaceDatamodule(lightning.LightningDataModule):
             self.test_dataset, batch_size=self.TEST_BATCH_SIZE
         )
 
-    def get_knowledge(
-        self, phase: Literal["validation", "test"]
-    ) -> (torch.Tensor, torch.LongTensor):
+    def get_knowledge(self, phase: Literal["validation", "test"]) -> Knowledge:
         return self.knowledge[phase]
