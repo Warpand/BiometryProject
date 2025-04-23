@@ -92,6 +92,11 @@ class ArcFaceModule(lightning.LightningModule):
         self.log("train/loss", loss, on_step=False, on_epoch=True)
         return loss
 
+    def on_train_epoch_end(self) -> None:
+        lrs = self.lr_schedulers()[0].get_last_lr()
+        self.log("train/lr_backbone", lrs[0])
+        self.log("train/lr_head", lrs[1])
+
     def evaluation_step(self, batch: Tuple[torch.Tensor, torch.LongTensor]) -> None:
         x, y = batch
         predicted_identities = self.find_identities(x, self.thresholds)

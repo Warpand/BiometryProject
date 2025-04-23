@@ -51,4 +51,5 @@ if __name__ == "__main__":
         logger=logger,
         check_val_every_n_epoch=cfg.logger.validation_every_n_epochs,
         enable_checkpointing=True,
+        max_epochs=cfg.experiment.epochs,
     )
