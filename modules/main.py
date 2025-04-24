@@ -85,7 +85,7 @@ class ArcFaceModule(pytorch_lightning.LightningModule):
             embeddings = self.embedd(x)
         similarities = F.linear(embeddings, database)
         max_index = torch.argmax(similarities, dim=1)
-        max_val = similarities[torch.arange(0, len(similarities)), max_index]
+        max_val = similarities[torch.arange(len(similarities)), max_index]
         return [
             torch.where(max_val > t, identities[max_index], IMPOSTOR_ID)
             for t in thresholds
