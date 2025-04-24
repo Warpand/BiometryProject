@@ -9,3 +9,4 @@ torchmetrics==1.7.0
 lightning==2.5.1
 tyro==0.9.19
 coolname==2.2.0
+wandb==0.19.10
