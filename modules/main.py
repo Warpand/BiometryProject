@@ -118,8 +118,8 @@ class ArcFaceModule(pytorch_lightning.LightningModule):
         for impostor_accuracy, member_accuracy, t in zip(
             self.impostor_accuracy, self.member_accuracy, self.thresholds
         ):
-            self.log(f"{stage}/{impostor_accuracy}_{t}", impostor_accuracy.compute())
-            self.log(f"{stage}/{member_accuracy}_{t}", member_accuracy.compute())
+            self.log(f"{stage}/impostor_accuracy_{t}", impostor_accuracy.compute())
+            self.log(f"{stage}/member_accuracy_{t}", member_accuracy.compute())
             impostor_accuracy.reset()
             member_accuracy.reset()
 
