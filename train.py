@@ -33,7 +33,7 @@ if __name__ == "__main__":
         threshold=cfg.experiment.threshold,
         epochs=cfg.experiment.epochs,
         optimizer_config=cfg.optimizer,
-        compile_submodules=cfg.model.compile,
+        batch_size=cfg.experiment.batch_size,
     )
 
     logger = WandbLogger(
@@ -53,3 +53,5 @@ if __name__ == "__main__":
         enable_checkpointing=True,
         max_epochs=cfg.experiment.epochs,
     )
+
+    trainer.fit(model=module, datamodule=datamodule)

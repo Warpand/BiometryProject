@@ -1,10 +1,10 @@
 import itertools
 from typing import List, Optional, Tuple, Union
 
-import lightning
+import pytorch_lightning
 import torch
 import torch.nn.functional as F
-from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
+from pytorch_lightning.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from torchmetrics import Metric
 
 from cfg import OptimizerConfig
@@ -15,7 +15,7 @@ from .metrics import ImpostorAccuracy, MemberAccuracy
 from .resnet import ResnetAdapter
 
 
-class ArcFaceModule(lightning.LightningModule):
+class ArcFaceModule(pytorch_lightning.LightningModule):
     def __init__(
         self,
         resnet: ResnetAdapter,
@@ -25,7 +25,7 @@ class ArcFaceModule(lightning.LightningModule):
         threshold: float | List[float],
         epochs: int,
         optimizer_config: OptimizerConfig,
-        compile_submodules: bool,
+        batch_size: Optional[int] = None,
     ):
         super().__init__()
         self.resnet = resnet
@@ -42,7 +42,7 @@ class ArcFaceModule(lightning.LightningModule):
 
         self.epochs = epochs
         self.optimizer_config = optimizer_config
-        self.compile_submodules = compile_submodules
+        self.batch_size = batch_size
 
         self.knowledge: Optional[Knowledge] = None
         self.impostor_accuracy: List[Metric] = []
@@ -56,7 +56,8 @@ class ArcFaceModule(lightning.LightningModule):
         self.member_accuracy = [
             MemberAccuracy().to(self.device) for _ in range(len(self.thresholds))
         ]
-        if self.compile_submodules:
+        if stage == "fit":
+            assert self.batch_size is not None
             self.resnet = torch.compile(self.resnet)
             self.arc_face_loss = torch.compile(self.arc_face_loss)
 
@@ -73,11 +74,18 @@ class ArcFaceModule(lightning.LightningModule):
     def find_identities(
         self, x: torch.Tensor, thresholds: List[float]
     ) -> Union[torch.Tensor, List[torch.Tensor]]:
-        database, identities = self.knowledge
-        embeddings = self.embedd(x)
+        database, identities = self.knowledge.data, self.knowledge.ids
+        if self.batch_size is not None and len(x) != self.batch_size:
+            padding = torch.empty(
+                self.batch_size - len(x), *x.shape[1:], device=x.device
+            )
+            embeddings = self.embedd(torch.vstack([x, padding]))
+            embeddings = embeddings[: len(x)]
+        else:
+            embeddings = self.embedd(x)
         similarities = F.linear(embeddings, database)
         max_index = torch.argmax(similarities, dim=1)
-        max_val = similarities[torch.arange(0, len(database)), max_index]
+        max_val = similarities[torch.arange(0, len(similarities)), max_index]
         return [
             torch.where(max_val > t, identities[max_index], IMPOSTOR_ID)
             for t in thresholds
@@ -112,8 +120,8 @@ class ArcFaceModule(lightning.LightningModule):
         ):
             self.log(f"{stage}/{impostor_accuracy}_{t}", impostor_accuracy.compute())
             self.log(f"{stage}/{member_accuracy}_{t}", member_accuracy.compute())
-            impostor_accuracy.restart()
-            member_accuracy.restart()
+            impostor_accuracy.reset()
+            member_accuracy.reset()
 
     def on_validation_epoch_start(self) -> None:
         self.set_knowledge(self.trainer.datamodule.get_knowledge("validation"))  # type: ignore

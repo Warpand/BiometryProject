@@ -8,12 +8,12 @@ try:
 except ImportError:
     from typing_extensions import Self
 
-import lightning
 import numpy as np
 import pandas as pd
+import pytorch_lightning
 import torch
-from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 from PIL import Image
+from pytorch_lightning.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 
 from . import pandas_utils
 
@@ -53,7 +53,7 @@ class Knowledge:
         return Knowledge(self.data.to(device), self.ids.to(device))
 
 
-class WebFaceDatamodule(lightning.LightningDataModule):
+class WebFaceDatamodule(pytorch_lightning.LightningDataModule):
     TEST_BATCH_SIZE = 1024
 
     def __init__(
@@ -85,19 +85,19 @@ class WebFaceDatamodule(lightning.LightningDataModule):
     ) -> (WebFaceDataset, Knowledge):
         members_metadata = pandas_utils.l_than(df, "id", min_impostor_id)
         members_test_metadata = members_metadata.drop_duplicates(subset="id")
-        impostor_metadata = pandas_utils.ge_than(df, "id", min_impostor_id)
+        impostor_metadata = pandas_utils.ge_than(df, "id", min_impostor_id).copy()
         impostor_metadata["id"] = IMPOSTOR_ID
         metadata = pd.concat((members_test_metadata, impostor_metadata))
         dataset = WebFaceDataset(metadata, self.transform)
-        knowledge_metadata = members_metadata.duplicated(subset="id")
+        knowledge_metadata = members_metadata[members_metadata.duplicated(subset="id")]
         knowledge = Knowledge(
             torch.stack(
                 [
-                    self.transform(Image.open(_get_full_path(row[1])))
-                    for row in knowledge_metadata.iterrows()
+                    self.transform(Image.open(_get_full_path(row.file)))
+                    for row in knowledge_metadata.itertuples()
                 ]
             ),
-            torch.LongTensor(knowledge_metadata["id"]),
+            torch.LongTensor(knowledge_metadata["id"].to_numpy()),
         )
         return dataset, knowledge
 
@@ -107,7 +107,9 @@ class WebFaceDatamodule(lightning.LightningDataModule):
         min_impostor_id = max_id - self.num_impostors
         min_member_id = min_impostor_id - self.num_members
         min_validation_impostor_id = min_member_id - self.num_validation_impostors
-        min_validation_member_id = min_member_id - self.num_validation_members
+        min_validation_member_id = (
+            min_validation_impostor_id - self.num_validation_members
+        )
 
         if stage == "fit":
             train_metadata = pandas_utils.l_than(df, "id", min_validation_member_id)
@@ -140,20 +142,24 @@ class WebFaceDatamodule(lightning.LightningDataModule):
         return torch.utils.data.DataLoader(
             self.validation_dataset,
             batch_size=self.batch_size,
-            shuffle=True,
             drop_last=True,
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self) -> EVAL_DATALOADERS:
         assert self.test_dataset is not None
         return torch.utils.data.DataLoader(
-            self.test_dataset, batch_size=self.TEST_BATCH_SIZE
+            self.test_dataset,
+            batch_size=self.TEST_BATCH_SIZE,
+            num_workers=self.num_workers,
         )
 
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         assert self.test_dataset is not None
         return torch.utils.data.DataLoader(
-            self.test_dataset, batch_size=self.TEST_BATCH_SIZE
+            self.test_dataset,
+            batch_size=self.TEST_BATCH_SIZE,
+            num_workers=self.num_workers,
         )
 
     def get_knowledge(self, phase: Literal["validation", "test"]) -> Knowledge:
