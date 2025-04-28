@@ -54,8 +54,6 @@ class Knowledge:
 
 
 class WebFaceDatamodule(pytorch_lightning.LightningDataModule):
-    TEST_BATCH_SIZE = 1024
-
     def __init__(
         self,
         transform: Callable[[Image.Image], torch.Tensor],
@@ -150,7 +148,7 @@ class WebFaceDatamodule(pytorch_lightning.LightningDataModule):
         assert self.test_dataset is not None
         return torch.utils.data.DataLoader(
             self.test_dataset,
-            batch_size=self.TEST_BATCH_SIZE,
+            batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
 
@@ -158,7 +156,7 @@ class WebFaceDatamodule(pytorch_lightning.LightningDataModule):
         assert self.test_dataset is not None
         return torch.utils.data.DataLoader(
             self.test_dataset,
-            batch_size=self.TEST_BATCH_SIZE,
+            batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
 

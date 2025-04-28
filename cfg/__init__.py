@@ -32,7 +32,7 @@ class ExperimentConfig(BaseConfig):
 
 @dataclass
 class ModelConfig(BaseConfig):
-    resnet_version: Literal[18, 34, 50, 101, 152] = 50
+    resnet_version: Literal[18, 34, 50, 101, 152] = 18
     embedding_dim: int = 512
     arc_face_margin: float = 0.5
     arc_face_scale: float = 30.0
