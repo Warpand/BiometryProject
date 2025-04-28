@@ -15,7 +15,7 @@ from cfg import OptimizerConfig
 from data import IMPOSTOR_ID, Knowledge
 
 from .loss import ArcFaceLoss
-from .metrics import AdmissionAccuracy, ImpostorAccuracy, MemberAccuracy
+from .metrics import AnyoneAccuracy, ImpostorAccuracy, MemberAccuracy
 from .resnet import ResnetAdapter
 
 
@@ -51,7 +51,7 @@ class ArcFaceModule(pytorch_lightning.LightningModule):
         self.knowledge: Optional[Knowledge] = None
         self.impostor_accuracy: List[Metric] = []
         self.member_accuracy: List[Metric] = []
-        self.admission_accuracy: List[Metric] = []
+        self.anyone_accuracy: List[Metric] = []
         self.save_hyperparameters(ignore=["resnet"], logger=False)
 
     def setup(self, stage: str) -> None:
@@ -61,8 +61,8 @@ class ArcFaceModule(pytorch_lightning.LightningModule):
         self.member_accuracy = [
             MemberAccuracy().to(self.device) for _ in range(len(self.thresholds))
         ]
-        self.admission_accuracy = [
-            AdmissionAccuracy().to(self.device) for _ in range(len(self.thresholds))
+        self.anyone_accuracy = [
+            AnyoneAccuracy().to(self.device) for _ in range(len(self.thresholds))
         ]
         if stage == "fit":
             assert self.batch_size is not None
@@ -116,29 +116,29 @@ class ArcFaceModule(pytorch_lightning.LightningModule):
     def evaluation_step(self, batch: Tuple[torch.Tensor, torch.LongTensor]) -> None:
         x, y = batch
         predicted_identities = self.find_identities(x, self.thresholds)
-        for impostor_accuracy, member_accuracy, admission_accuracy, y_hat in zip(
+        for impostor_accuracy, member_accuracy, anyone_accuracy, y_hat in zip(
             self.impostor_accuracy,
             self.member_accuracy,
-            self.admission_accuracy,
+            self.anyone_accuracy,
             predicted_identities,
         ):
             impostor_accuracy(y_hat, y)
             member_accuracy(y_hat, y)
-            admission_accuracy(y_hat, y)
+            anyone_accuracy(y_hat, y)
 
     def evaluation_epoch_end(self, stage: str) -> None:
-        for impostor_accuracy, member_accuracy, admission_accuracy, t in zip(
+        for impostor_accuracy, member_accuracy, anyone_accuracy, t in zip(
             self.impostor_accuracy,
             self.member_accuracy,
-            self.admission_accuracy,
+            self.anyone_accuracy,
             self.thresholds,
         ):
             self.log(f"{stage}/impostor_accuracy_{t}", impostor_accuracy.compute())
             self.log(f"{stage}/member_accuracy_{t}", member_accuracy.compute())
-            self.log(f"{stage}/admission_accuracy_{t}", admission_accuracy.compute())
+            self.log(f"{stage}/anyone_accuracy_{t}", anyone_accuracy.compute())
             impostor_accuracy.reset()
             member_accuracy.reset()
-            admission_accuracy.reset()
+            anyone_accuracy.reset()
 
     def on_validation_epoch_start(self) -> None:
         self.set_knowledge(self.trainer.datamodule.get_knowledge("validation"))  # type: ignore

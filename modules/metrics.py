@@ -34,12 +34,12 @@ class MemberAccuracy(BaseAccuracy):
         predictions = predictions[member_mask]
         target = target[member_mask]
         self.correct += torch.sum(predictions == target)
-        self.total += len(target)
+        self.total += len(predictions)
 
 
-class AdmissionAccuracy(BaseAccuracy):
+class AnyoneAccuracy(BaseAccuracy):
     def update(self, predictions: torch.Tensor, target: torch.Tensor) -> None:
-        predictions = torch.where(predictions == IMPOSTOR_ID, predictions, ~IMPOSTOR_ID)
-        target = torch.where(target == IMPOSTOR_ID, target, ~IMPOSTOR_ID)
-        self.correct += torch.sum(predictions == target)
-        self.total += len(target)
+        member_mask = target != IMPOSTOR_ID
+        predictions = predictions[member_mask]
+        self.correct += torch.sum(predictions != IMPOSTOR_ID)
+        self.total += len(predictions)
