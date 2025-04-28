@@ -35,7 +35,7 @@ class ModelConfig(BaseConfig):
     resnet_version: Literal[18, 34, 50, 101, 152] = 50
     embedding_dim: int = 512
     arc_face_margin: float = 0.5
-    arc_face_scale: float = 64.0
+    arc_face_scale: float = 30.0
     pretrained: bool = True
     compile: bool = True
 

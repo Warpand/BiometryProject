@@ -1,10 +1,14 @@
 import itertools
-from typing import List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import pytorch_lightning
 import torch
 import torch.nn.functional as F
-from pytorch_lightning.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
+from pytorch_lightning.utilities.types import (
+    STEP_OUTPUT,
+    LRSchedulerTypeUnion,
+    OptimizerLRScheduler,
+)
 from torchmetrics import Metric
 
 from cfg import OptimizerConfig
@@ -172,3 +176,8 @@ class ArcFaceModule(pytorch_lightning.LightningModule):
             milestones=[cfg.warmup_epochs],
         )
         return [optimizer], [scheduler]
+
+    def lr_scheduler_step(
+        self, scheduler: LRSchedulerTypeUnion, metric: Optional[Any]
+    ) -> None:
+        scheduler.step()
