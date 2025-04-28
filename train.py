@@ -13,6 +13,8 @@ if __name__ == "__main__":
 
     torch.set_float32_matmul_precision("high")
 
+    run_name = coolname.generate_slug(2)
+
     if cfg.experiment.seed is not None:
         pytorch_lightning.seed_everything(cfg.experiment.seed)
 
@@ -37,7 +39,7 @@ if __name__ == "__main__":
     )
 
     logger = WandbLogger(
-        name=coolname.generate_slug(2),
+        name=run_name,
         save_dir=cfg.logger.root_dir,
         log_model=True,
         project=cfg.logger.wandb_project,
