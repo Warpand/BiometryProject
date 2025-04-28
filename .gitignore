@@ -1,8 +1,16 @@
+# IDE files
 .idea/
 
+# Python stuff
 __pycache__/
 *.py[cod]
 *$py.class
 
+# data
 dataset/*
 !dataset/metadata.csv
+
+# default directories
+wandb/
+checkpoints/
+biometry/
